@@ -16,6 +16,7 @@ package jira
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -66,12 +67,16 @@ func New(c *config.JiraConfig, t *template.Template, l *slog.Logger, httpOpts ..
 
 // Notify implements the Notifier interface.
 func (n *Notifier) Notify(ctx context.Context, as ...*types.Alert) (bool, error) {
-	key, err := notify.ExtractGroupKey(ctx)
-	if err != nil {
-		return false, err
-	}
 
-	logger := n.logger.With("group_key", key.String())
+	groupLabels, ok := notify.GroupLabels(ctx)
+	if !ok {
+		return false, fmt.Errorf("group labels missing")
+	}
+	groupID := hashGroupLabels(groupLabels)
+
+	logger := n.logger.With("group_key", groupLabels.String())
+
+	n.logger.Debug("computed JIRA group hash", "group_labels", groupLabels, "group_id", groupID)
 
 	var (
 		alerts = types.Alerts(as...)
@@ -87,7 +92,7 @@ func (n *Notifier) Notify(ctx context.Context, as ...*types.Alert) (bool, error)
 		method = http.MethodPost
 	)
 
-	existingIssue, shouldRetry, err := n.searchExistingIssue(ctx, logger, key.Hash(), alerts.HasFiring(), tmplTextFunc)
+	existingIssue, shouldRetry, err := n.searchExistingIssue(ctx, logger, groupID, alerts.HasFiring(), tmplTextFunc)
 	if err != nil {
 		return shouldRetry, fmt.Errorf("failed to look up existing issues: %w", err)
 	}
@@ -106,7 +111,7 @@ func (n *Notifier) Notify(ctx context.Context, as ...*types.Alert) (bool, error)
 		logger.Debug("updating existing issue", "issue_key", existingIssue.Key)
 	}
 
-	requestBody, err := n.prepareIssueRequestBody(ctx, logger, key.Hash(), tmplTextFunc)
+	requestBody, err := n.prepareIssueRequestBody(ctx, logger, groupID, tmplTextFunc)
 	if err != nil {
 		return false, err
 	}
@@ -386,4 +391,9 @@ func (n *Notifier) doAPIRequestFullPath(ctx context.Context, method, path string
 	}
 
 	return responseBody, false, nil
+}
+
+func hashGroupLabels(labels model.LabelSet) string {
+	sum := sha256.Sum256([]byte(labels.String()))
+	return fmt.Sprintf("%x", sum)
 }
