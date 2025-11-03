@@ -221,6 +221,13 @@ var DefaultFuncs = FuncMap{
 		}
 		return string(bytes), nil
 	},
+	"addDuration": func(t time.Time, ds string) (int64, error) {
+		d, err := time.ParseDuration(ds)
+		if err != nil {
+			return 0, err
+		}
+		return t.Add(d).UnixMilli(), nil
+	},
 }
 
 // Pair is a key/value string pair.
