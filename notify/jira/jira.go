@@ -87,21 +87,7 @@ func (n *Notifier) Notify(ctx context.Context, as ...*types.Alert) (bool, error)
 		method = http.MethodPost
 	)
 
-	jiraHash := key.Hash()
-	// If a custom identifier is configured, use its hash instead.
-	if n.conf.HashIdentifier != "" {
-		identifier, err := tmplTextFunc(n.conf.HashIdentifier)
-		if err != nil {
-			return false, fmt.Errorf("hash_identifier: %w", err)
-		}
-
-		identifier = strings.TrimSpace(identifier)
-		if identifier != "" {
-			jiraHash = notify.Key(identifier).Hash()
-		}
-	}
-
-	existingIssue, shouldRetry, err := n.searchExistingIssue(ctx, logger, jiraHash, alerts.HasFiring(), tmplTextFunc)
+	existingIssue, shouldRetry, err := n.searchExistingIssue(ctx, logger, key.Hash(), alerts.HasFiring(), tmplTextFunc)
 	if err != nil {
 		return shouldRetry, fmt.Errorf("failed to look up existing issues: %w", err)
 	}
@@ -119,7 +105,7 @@ func (n *Notifier) Notify(ctx context.Context, as ...*types.Alert) (bool, error)
 		logger.Debug("updating existing issue", "issue_key", existingIssue.Key, "summary_update_enabled", n.conf.Summary.EnableUpdateValue(), "description_update_enabled", n.conf.Description.EnableUpdateValue())
 	}
 
-	requestBody, err := n.prepareIssueRequestBody(ctx, logger, jiraHash, tmplTextFunc)
+	requestBody, err := n.prepareIssueRequestBody(ctx, logger, key.Hash(), tmplTextFunc)
 	if err != nil {
 		return false, err
 	}
