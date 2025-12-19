@@ -1,0 +1,929 @@
+{{/* global default variables */}}
+{{- define "__alertmanager" -}}
+  AlertManager
+{{- end -}}
+
+{{- define "__alertmanagerURL" -}}
+  https://alertmanager.mon.cloud.dvag/#/alerts?receiver={{ .Receiver | urlquery }}
+{{- end -}}
+
+{{- define "__silencesURL" -}}
+  https://alertmanager.mon.cloud.dvag/#/silences/new?filter=%7Balertname%3D%22{{ .Labels.alertname }}%22%2C%20severity%3D%22{{ .Labels.severity }}%22%2C%20hostname%3D%22{{ .Labels.hostname }}%22%7D
+{{- end -}}
+
+{{- define "jira.leanix" -}}
+  {{- with index .Alerts 0 -}}
+    {{- if .Labels.leanix_app_id -}}
+      {{- .Labels.leanix_app_id -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+
+{{ define "jira.v3.descriptioncustom" }}
+{
+  "version": 1,
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello "
+        },
+        {
+          "type": "text",
+          "text": "world",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+{{- end }}
+{{ define "jira.v3.summary" }}
+{
+  "version": 1,
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Hello "
+        },
+        {
+          "type": "text",
+          "text": "world",
+          "marks": [
+            {
+              "type": "strong"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+{{- end }}
+
+{{- define "jira.default.summary" -}}
+  {{- $isAzure := false -}}
+  {{- with index .Alerts 0 -}}
+    {{- if .Labels.managedby -}}
+      [{{- .Labels.managedby | toUpper -}}]
+    {{- end -}}
+    {{- if .Labels.environment -}}
+      [{{- .Labels.environment | toUpper -}}]
+    {{- end -}}
+    {{- if eq .Labels.plattform "azure" -}}
+      {{- $isAzure = true -}}
+    {{- end -}}
+  {{- end -}}
+  {{- if not $isAzure -}}
+  [{{- .Status | toUpper -}}
+  {{- if eq .Status "firing" -}}
+    :{{- .Alerts.Firing | len -}}
+  {{- end -}}]
+  {{- end -}}
+  {{- range .GroupLabels.SortedPairs }}
+    {{- if ne .Name "environment" }}{{ .Value }} {{ end }}
+  {{- end -}}
+{{- end -}}
+
+{{- define "jira.env" -}}
+  {{- with index .Alerts 0 -}}
+    {{- if .Labels.environment -}}
+      {{- if eq .Labels.environment "Prd" -}}
+        Produktion
+        {{- else if eq .Labels.environment "Abn" -}}
+          Abnahme
+        {{- else if eq .Labels.environment "Vdl" -}}
+          Für alle Umgebungen
+        {{- else if eq .Labels.environment "Cibuild" -}}
+          Für alle Umgebungen
+        {{- else if eq .Labels.environment "Undefined_dvag_stage" -}}
+          Für alle Umgebungen
+        {{- else -}}
+          {{- .Labels.environment -}}
+        {{- end -}}
+      {{- else -}}
+        Für alle Umgebungen
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+
+{{- define "jira.host" -}}
+  {{- with index .Alerts 0 -}}
+    {{- if .Labels.hostname -}}
+      {{- .Labels.hostname -}}
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+
+{{- define "jira.default.priority" -}}
+  {{- $priority := "" }}
+  {{- range .Alerts.Firing -}}
+      {{- $severity := index .Labels "severity" -}}
+      {{- if eq $severity "disaster" -}}
+          {{- $priority = "Hoch" -}}
+      {{- else if eq $severity "critical" -}}
+          {{- if ne $priority "Hoch" -}}{{- $priority = "Mittel" -}}{{- end -}}
+      {{- else if and (eq $severity "warning") (and (ne $priority "Mittel") (ne $priority "Hoch")) -}}
+          {{- $priority = "Gering" -}}
+      {{- else if and (eq $severity "info") (eq $priority "") -}}
+          {{- $priority = "Gering" -}}
+      {{- end -}}
+  {{- end -}}
+  {{- if eq $priority "" -}}
+      {{- range .Alerts.Resolved -}}
+          {{- $severity := index .Labels "severity" -}}
+          {{- if or (eq $severity "disaster") (eq $severity "critical") -}}
+              {{- $priority = "Hoch" -}}
+          {{- else if and (eq $severity "warning") (ne $priority "Hoch") -}}
+              {{- $priority = "Mittel" -}}
+          {{- else if and (eq $severity "info") (eq $priority "") -}}
+              {{- $priority = "Gering" -}}
+          {{- end -}}
+      {{- end -}}
+  {{- end -}}
+  {{- $priority -}}
+{{- end -}}
+
+{{- define "jira.default.description" -}}
+  {{- with index .Alerts 0 -}}
+    {{/* Nicht gültig für K8s Alarme */}}
+    {{- if not .Labels.cluster_id -}}
+      {{/* JT Alarme */}}
+      {{- if .Labels.managedby -}}
+        {{- if eq .Labels.managedby "JT" -}}
+          {color:red}Achtung, Dienstleister JT-Computer verantwortlich für dieses Gerät{color}
+          Bitte wie im [Runbook|https://projektportal.dvag.com/confluence/display/SUM/Runbook+Netzwerk+Pannonia] beschrieben informieren und ein FR Ticket im Bereich NETZJTC erstellen.
+          Ticket {color:red}nicht{color} dem User Netzwerk1 zuweisen!
+        {{- end -}}
+      {{- end -}}
+      {{/* BN Alarme */}}
+      {{- if .Labels.managedby -}}
+        {{- if eq .Labels.managedby "blue networks" -}}
+          {color:red}Achtung, Dienstleister Blue Networks verantwortlich für dieses Gerät{color}
+          Bitte User Netzwerk1 zuweisen.
+          ---------------------------------------------------------
+        {{- end -}}
+      {{- end -}}
+      {{/* Azure */}}
+      {{- if eq .Labels.plattform "azure" }}
+        {{- if .Labels.start_end_date }}
+          Zeitfenster {{ .Labels.start_end_date }}
+        {{- end }}
+        [In Azure anzeigen|{{ .GeneratorURL }}]
+      {{- end }}
+      {{/* On-Premise */}}
+      {{ if and (ne .Labels.plattform "azure") }}
+        {{ if ne .Labels.job "aktives-monitoring" }}
+          {{- if ne .Labels.platform "checkly" }}
+            {{ if .Annotations.metric_name -}}
+            [Grafana Explore Graph|https://grafana.mon.cloud.dvag/explore?orgId=1&left=%7B%22datasource%22:%22prometheus.mon.cloud.dvag%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22instant%22:true,%22range%22:true,%22exemplar%22:true,%22expr%22:%22{{ .Annotations.metric_name }}%22%7D%5D,%22range%22:%7B%22from%22:%22now-3h%22,%22to%22:%22now%22%7D%7D]
+            {{ end -}}
+          {{ end -}}
+        {{ end -}}
+      {{ end -}}
+      {{/* no links for log4u Alerts */}}
+      {{- if ne .Labels.job "aktives-monitoring" }}
+        {{- if ne .Labels.platform "checkly" }}
+          {{- if and (ne .Labels.platform "log4u") -}}
+          [Alarmquelle|{{ .GeneratorURL }}]
+          [Überprüfen aktiver Alarme|https://prometheus.mon.cloud.dvag/graph?g0.expr=ALERTS%7Balertname%3D%22{{ .Labels.alertname }}%22%2C hostname%3D%22{{ .Labels.hostname }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+          [Silence Alert|https://alertmanager.mon.cloud.dvag/#/silences/new?filter=%7Balertname%3D%22{{ .Labels.alertname }}%22%2C hostname%3D%22{{ .Labels.hostname }}%22%7D]
+          {{- end }}
+          {{/* Network Grafana Dashboard Link */}}
+          {{- if .Labels.snmpCommunity -}}
+            {{- if .Labels.grafana_id -}}
+              {{ if and (ne .Labels.grafana_id "empty") -}}[Grafana Dashboard|https://grafana.mon.cloud.dvag/d/{{ .Labels.grafana_id }}?orgId=1&var-datasource=prometheus.mon.cloud.dvag&var-product={{ .Labels.product }}&var-env={{ .Labels.environment }}&var-instance={{ .Labels.fqdn }}]
+              {{ end -}}
+            {{- end -}}
+          {{- end -}}
+          {{/* No network Grafana Dashboard Link */}}
+          {{- if not .Labels.snmpCommunity -}}
+            {{- if .Labels.grafana_id }}
+              {{ if and (ne .Labels.grafana_id "empty") }}[Grafana Dashboard|https://grafana.mon.cloud.dvag/d/{{ .Labels.grafana_id }}?orgId=1&var-datasource=prometheus.mon.cloud.dvag&var-product={{ .Labels.product }}&var-env={{ .Labels.environment }}&var-hostname={{ .Labels.hostname }}]
+              {{ end }}
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+      {{/* AEM Alerts */}}
+      {{- if eq .Labels.job "aktives-monitoring" -}}
+        {{- if .Labels.github_run_id -}}
+          {{- if .Labels.github_repository -}}[Github Action|https://github.com/{{ .Labels.github_repository }}/actions/runs/{{ .Labels.github_run_id }}]
+          {{- end }}
+        {{- end }}
+        {{ if .Labels.report_url -}}[Playwright Report|{{ .Labels.report_url }}]
+        {{ end }}
+
+      {{- end -}}
+      {{/* Checkly Alerts */}}
+      {{- if eq .Labels.platform "checkly" -}}
+        {{- if .Labels.check_id -}}
+        {{- end }}
+        [Silence Alert|https://alertmanager.mon.cloud.dvag/#/silences/new?filter=%7Bname%3D%22{{ .Labels.name }}%22%7D]
+        [Grafana Checkly Dashboard|https://grafana.mon.cloud.dvag/d/belrjp7oifm68f?orgId=1&var-check_id={{ .Labels.check_id }}]
+        [Grafana Explore Graph|https://grafana.mon.cloud.dvag/explore?orgId=1&left=%7B%22datasource%22:%22prometheus.mon.cloud.dvag%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22instant%22:true,%22range%22:true,%22exemplar%22:true,%22expr%22:%22{{ .Annotations.metric_name }}%22%7D%5D,%22range%22:%7B%22from%22:%22now-3h%22,%22to%22:%22now%22%7D%7D]
+      {{- end -}}
+      {{/* K8S Alarme. We have a cluster mapping here for the link "Überprüfen aktiver Alarme Link" */}}
+      {{ if .Labels.cluster_id }}
+        {{ if eq .Labels.cluster_name "aks-abnahme01-abn" }}[Überprüfen aktiver Alarme|https://metrics.abnahme01.az.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-cibuild02-prd" }}[Überprüfen aktiver Alarme|https://metrics.cibuild02.prd.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-dil-abn-01" }}[Überprüfen aktiver Alarme|https://metrics.dil01.abn.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-dil-prd-01" }}[Überprüfen aktiver Alarme|https://metrics.dil01.prd.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-entwicklung01-ent" }}[Überprüfen aktiver Alarme|https://metrics.entwicklung01.ent.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-idm-abn-01" }}[Überprüfen aktiver Alarme|https://metrics.idm01.abn.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-idm-prd-01" }}[Überprüfen aktiver Alarme|https://metrics.idm01.prd.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-integration01-int" }}[Überprüfen aktiver Alarme|https://metrics.integration01.int.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-lowcode02-abn" }}[Überprüfen aktiver Alarme|https://metrics.lowcode02-abn.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-lowcode02-prd" }}[Überprüfen aktiver Alarme|https://metrics.lowcode02-prd.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-shared-prd-01" }}[Überprüfen aktiver Alarme|https://metrics.shared-prd-01.produktion.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-shared-prd-02" }}[Überprüfen aktiver Alarme|https://metrics.shared-prd-02.produktion.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        {{ if eq .Labels.cluster_name "aks-vdl01-prd" }}[Überprüfen aktiver Alarme|https://metrics.vdl01.prd.aks.cloud.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w]
+        {{end}}
+        [Silence Alert|https://alertmanager.mon.cloud.dvag/#/silences/new?filter=%7Balertname%3D%22{{ .Labels.alertname }}%22%2C instance%3D%22{{ .Labels.instance }}%22%7D]
+      {{- end -}}
+    {{- end -}}
+  {{- end -}}
+
+    {{- range .Alerts -}}
+      {{- if .Annotations -}}
+        {color:red}Allgemeine Infos (Annotations){color}
+        {{ range .Annotations.SortedPairs -}}
+        {{/* Filter out internal labels */}}
+          {{- if eq .Name "description" -}}
+            {{ .Value }}
+          {{ end }}
+          {{- if ne .Name "description" -}}
+            {{- if ne .Name "metric_name" -}}
+              * {{ .Name }}="{{ .Value }}"
+            {{ end }}
+          {{- end -}}
+        {{- end -}}
+      {{ end }}
+
+      {color:red}Detail Infos (Labels){color}
+
+      {{ range .Labels.SortedPairs -}}
+        {{- if ne .Name "grafana_id" -}}
+          {{- if ne .Name "tags" -}}
+            {{- if ne .Name "check_id" -}}
+              {{- if ne .Name "instance" -}}
+                * {{ .Name }}="{{ .Value }}"
+              {{ end }}
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+      {{ if .Fingerprint }}
+      Fingerprint ID: {{ .Fingerprint }}
+      {{ end }}
+        ---------------------------------------------------------
+    {{ end -}}
+  {{- end -}}
+
+
+{{/* default subject -> summary */}}
+{{- define "__subject" -}}
+  {{- with index .Alerts 0 -}}
+    {{- if .Labels.managedby -}}
+      [{{- .Labels.managedby | toUpper -}}]
+    {{- end -}}
+  {{- end -}}
+  [{{- .Status | toUpper -}}
+  {{- if eq .Status "firing" -}}
+    :{{- .Alerts.Firing | len -}}
+  {{- end -}}]
+  {{- .GroupLabels.SortedPairs.Values | join " " -}}
+{{- end -}}
+
+{{/* opsgenie templates*/}}
+{{- define "opsgenie.default.message" -}}
+  {{- with index .Alerts 0 -}}
+    {{- if .Labels.managedby -}}
+      [{{- .Labels.managedby | toUpper -}}]
+    {{- end -}}
+  {{- end -}}
+  [{{- .Status | toUpper -}}
+  {{- if eq .Status "firing" -}}
+    :{{- .Alerts.Firing | len -}}
+  {{- end -}}]
+  {{- .GroupLabels.SortedPairs.Values | join " " -}}
+{{- end -}}
+
+{{- define "opsgenie.default.message.treaton" -}}
+  {{- with index .Alerts 0 -}}
+    {{- if .Labels.managedby -}}
+      [{{- .Labels.managedby | toUpper -}}
+    {{- end -}}
+  {{- end -}}
+  [{{- .Status | toUpper -}}
+  {{- if eq .Status "firing" -}}
+    :{{- .Alerts.Firing | len -}}
+  {{- end -}}]
+  {{- .GroupLabels.SortedPairs.Values | join " " -}}
+  {{- with index .Alerts 0 -}}
+    {{- if .Annotations.value -}}
+      {{- .Annotations.value -}}
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- define "opsgenie.default.priority" -}}
+  {{- with index .Alerts 0 -}}
+    {{- if eq .Labels.severity "critical" -}}
+      P1
+      {{- else if eq .Labels.severity "warning" -}}
+        P3
+      {{- else if eq .Labels.severity "standard" -}}
+        P3
+      {{- else -}}
+        P4
+    {{- end -}}
+  {{- end -}}
+{{- end -}}
+
+{{- define "opsgenie.default.tags" -}}
+  {{- range .Alerts -}}
+    {{ .Labels.instance }}
+  {{- end -}}
+{{- end -}}
+
+{{/* opsgenie default description is just a clone if jiralert description template*/}}
+{{ define "opsgenie.default.description" }}
+   {{- with index .Alerts 0 -}}
+      {{/* Nicht gültig für K8s Alarme */}}
+      {{- if not .Labels.cluster_id -}}
+        {{/* JT Alarme */}}
+        {{- if .Labels.managedby -}}
+          {{- if eq .Labels.managedby "JT" -}}
+            Achtung, Dienstleister JT-Computer verantwortlich für dieses Gerät
+            Bitte wie im [Runbook|https://projektportal.dvag.com/confluence/display/SUM/Runbook+Netzwerk+Pannonia] beschrieben informieren und ein FR Ticket im Bereich NETZJTC erstellen.
+            Ticket nicht dem User Netzwerk1 zuweisen!
+          {{- end -}}
+        {{- end -}}
+        {{/* BN Alarme */}}
+        {{- if .Labels.managedby -}}
+          {{- if eq .Labels.managedby "blue networks" -}}
+            Achtung, Dienstleister Blue Networks verantwortlich für dieses Gerät
+            Bitte User Netzwerk1 zuweisen.
+            ---------------------------------------------------------
+          {{- end -}}
+        {{- end -}}
+        {{/* Azure */}}
+        {{- if eq .Labels.plattform "azure" -}}
+          {{- if .Labels.start_end_date }}
+            Zeitfenster {{ .Labels.start_end_date }}
+          {{- end }}
+          <a href="{{ .GeneratorURL }}">In Azure anzeigen</a>
+        {{- end -}}
+        {{/* On-Premise */}}
+        {{- if and (ne .Labels.plattform "azure") -}}
+          {{- if ne .Labels.job "aktives-monitoring" -}}
+            {{- if .Annotations.metric_name -}}
+            <a href="https://grafana.mon.cloud.dvag/explore?orgId=1&left=%7B%22datasource%22:%22prometheus-test.mon.cloud.dvag%22,%22queries%22:%5B%7B%22refId%22:%22A%22,%22instant%22:true,%22range%22:true,%22exemplar%22:true,%22expr%22:%22{{ .Annotations.metric_name }}%22%7D%5D,%22range%22:%7B%22from%22:%22now-3h%22,%22to%22:%22now%22%7D%7D">Grafana Explore Graph</a>
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+        {{/* no links for log4u Alerts */}}
+        {{- if and (ne .Labels.plattform "log4u") -}}
+          {{- if ne .Labels.job "aktives-monitoring" }}
+          <a href="{{ .GeneratorURL }}">Alarmquelle</a>
+          <a href="https://prometheus.mon.cloud.dvag/graph?g0.expr=ALERTS%7Bhostname%3D%22{{ .Labels.hostname }}%22,alertname%3D%22{{ .Labels.alertname }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+          <a href='https://alertmanager.mon.cloud.dvag/#/silences/new?filter={alertname%3D"{{ .Labels.alertname }}"%2C hostname%3D"{{ .Labels.hostname }}"\}'>Silence Alert</a>
+          {{- end }}
+        {{- end -}}
+        {{/* No network Grafana Dashboard Link */}}
+        {{ if not .Labels.snmpCommunity -}}
+          {{- if .Labels.grafana_id -}}
+            {{- if and (ne .Labels.grafana_id "empty") -}}
+            <a href="https://grafana.mon.cloud.dvag/d/{{ .Labels.grafana_id }}?orgId=1&var-datasource=prometheus-test.mon.cloud.dvag&var-product={{ .Labels.product }}&var-env={{ .Labels.environment }}&var-instance={{ .Labels.fqdn }}">Grafana Dashboard</a>
+            {{- end -}}
+          {{- end -}}
+        {{- end -}}
+      {{- end -}}
+      {{/* K8S Alarme. We have a cluster mapping here for the link "Überprüfen aktiver Alarme Link" */}}
+      {{ if .Labels.cluster_id -}}
+        {{- if eq .Labels.cluster_name "aks-dfs-ent-01" -}}
+          <a href="https://metrics.dfs-ent-01.entwicklung.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-abnahme01-abn" -}}
+          <a href="https://metrics.abnahme-abn-01.abnahme.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-cibuild02-prd" -}}
+          <a href="https://metrics.cibuild02.prd.aks.cloud.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-dil-abn-01" -}}
+          <a href="https://metrics.dil-abn-01.abnahme.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-dil-prd-01" -}}
+          <a href="https://metrics.dil-prd-01.produktion.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-entwicklung01-ent" -}}
+          <a href="https://metrics.entwicklung-ent-01.entwicklung.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-idm-abn-01" -}}
+          <a href="https://metrics.idm-abn-01.abnahme.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-idm-prd-01" -}}
+          <a href="https://metrics.idm-prd-01.produktion.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-integration01-int" -}}
+          <a href="https://metrics.integration-int-01.integration.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-lowcode02-abn" -}}
+          <a href="https://metrics.lowcode-abn-02.abnahme.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-lowcode02-prd" -}}
+          <a href="https://metrics.lowcode-prd-02.produktion.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-shared-prd-01" -}}
+          <a href="https://metrics.shared-prd-01.produktion.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-shared-prd-02" -}}
+          <a href="https://metrics.shared-prd-02.produktion.dvag/graph?g0.expr=ALERTS%7Bcluster_name%3D%22{{ .Labels.cluster_name}}%22,instance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-vdl01-prd" -}}
+          <a href="https://metrics.vdl01.prd.aks.cloud.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        {{- if eq .Labels.cluster_name "aks-mgmt-prd-01" -}}
+          <a href="https://metrics.vdl-prd-01.produktion.dvag/graph?g0.expr=ALERTS%7Binstance%3D%22{{ .Labels.instance }}%22%7D&g0.tab=1&g0.stacked=0&g0.range_input=1w">Überprüfen aktiver Alarme</a>
+        {{- end -}}
+        [Silence Alert|https://alertmanager.mon.cloud.dvag/#/silences/new?filter=%7Balertname%3D%22{{ .Labels.alertname }}%22%2C instance%3D%22{{ .Labels.instance }}%22%7D]
+      {{- end -}}
+    {{- end -}}
+
+    {{- range .Alerts -}}
+      {{- if .Annotations -}}
+        Allgemeine Infos (Annotations)
+        {{ range .Annotations.SortedPairs -}}
+          {{ if eq .Name "description" }}
+            {{ .Value }}
+          {{ end }}
+          {{- if ne .Name "description" -}}
+            {{- if ne .Name "metric_name" -}}
+              * {{ .Name }}="{{ .Value }}"
+            {{ end }}
+          {{- end -}}
+        {{- end -}}
+      {{ end }}
+
+    Detail Infos (Labels)
+
+    {{ range .Labels.SortedPairs -}}
+      * {{ .Name }}="{{ .Value }}"
+    {{ end }}
+    {{ if .Fingerprint }}
+     Fingerprint ID: {{ .Fingerprint }}
+    {{ end }}
+      ---------------------------------------------------------
+  {{ end -}}
+{{- end -}}
+
+{{/* Gets used by msteams template */}}
+{{ define "__text_alert_list_markdown" }}
+  {{ range . }}
+    Labels:
+    {{ range .Labels.SortedPairs }}
+      - {{ .Name }} = {{ .Value }}
+    {{- end -}}
+    Annotations:
+    {{ range .Annotations.SortedPairs }}
+      - {{ .Name }} = {{ .Value }}
+    {{- end -}}
+    Source: {{ .GeneratorURL }}
+  {{- end -}}
+{{- end -}}
+
+{{/* just an redirect to __subject template */}}
+{{ define "msteams.default.title" }}
+  {{ template "__subject" . }}
+{{- end -}}
+
+{{ define "msteams.default.text" }}
+  {{- if gt (len .Alerts.Firing) 0 }}
+    # Alerts Firing:
+    {{ template "__text_alert_list_markdown" .Alerts.Firing }}
+  {{- end -}}
+  {{- if gt (len .Alerts.Resolved) 0 }}
+    # Alerts Resolved:
+    {{ template "__text_alert_list_markdown" .Alerts.Resolved }}
+  {{- end -}}
+{{- end -}}
+
+{{/* default email HTML Template */}}
+{{ define "email.default.html" }}
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta name="viewport" content="width=device-width" />
+<meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+<title>{{ template "__subject" . }}</title>
+<style>
+{{/* -------------------------------------
+    GLOBAL
+    A very basic CSS reset
+------------------------------------- */}}
+* {
+  margin: 0;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  box-sizing: border-box;
+  font-size: 14px;
+}
+
+img {
+  max-width: 100%;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -webkit-text-size-adjust: none;
+  width: 100% !important;
+  height: 100%;
+  line-height: 1.6em;
+  {{/* 1.6em * 14px = 22.4px, use px to get airier line-height also in Thunderbird, and Yahoo!, Outlook.com, AOL webmail clients */}}
+  {{/*line-height: 22px;*/}}
+}
+
+{{/* Let's make sure all tables have defaults */}}
+table td {
+  vertical-align: top;
+}
+
+{{/* -------------------------------------
+    BODY & CONTAINER
+------------------------------------- */}}
+body {
+  background-color: #f6f6f6;
+}
+
+.body-wrap {
+  background-color: #f6f6f6;
+  width: 100%;
+}
+
+.container {
+  display: block !important;
+  max-width: 600px !important;
+  margin: 0 auto !important;
+  {{/* makes it centered */}}
+  clear: both !important;
+}
+
+.content {
+  max-width: 600px;
+  margin: 0 auto;
+  display: block;
+  padding: 20px;
+}
+
+{{/* -------------------------------------
+    HEADER, FOOTER, MAIN
+------------------------------------- */}}
+.main {
+  background-color: #fff;
+  border: 1px solid #e9e9e9;
+  border-radius: 3px;
+}
+
+.content-wrap {
+  padding: 30px;
+}
+
+.content-block {
+  padding: 0 0 20px;
+}
+
+.header {
+  width: 100%;
+  margin-bottom: 20px;
+}
+
+.footer {
+  width: 100%;
+  clear: both;
+  color: #999;
+  padding: 20px;
+}
+.footer p, .footer a, .footer td {
+  color: #999;
+  font-size: 12px;
+}
+
+{{/* -------------------------------------
+    TYPOGRAPHY
+------------------------------------- */}}
+h1, h2, h3 {
+  font-family: "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+  color: #000;
+  margin: 40px 0 0;
+  line-height: 1.2em;
+  font-weight: 400;
+}
+
+h1 {
+  font-size: 32px;
+  font-weight: 500;
+  {{/* 1.2em * 32px = 38.4px, use px to get airier line-height also in Thunderbird, and Yahoo!, Outlook.com, AOL webmail clients */}}
+  {{/*line-height: 38px;*/}}
+}
+
+h2 {
+  font-size: 24px;
+  {{/* 1.2em * 24px = 28.8px, use px to get airier line-height also in Thunderbird, and Yahoo!, Outlook.com, AOL webmail clients */}}
+  {{/*line-height: 29px;*/}}
+}
+
+h3 {
+  font-size: 18px;
+  {{/* 1.2em * 18px = 21.6px, use px to get airier line-height also in Thunderbird, and Yahoo!, Outlook.com, AOL webmail clients */}}
+  {{/*line-height: 22px;*/}}
+}
+
+h4 {
+  font-size: 14px;
+  font-weight: 600;
+}
+
+p, ul, ol {
+  margin-bottom: 10px;
+  font-weight: normal;
+}
+p li, ul li, ol li {
+  margin-left: 5px;
+  list-style-position: inside;
+}
+
+{{/* -------------------------------------
+    LINKS & BUTTONS
+------------------------------------- */}}
+a {
+  color: #348eda;
+  text-decoration: underline;
+}
+
+.btn-primary {
+  text-decoration: none;
+  color: #FFF;
+  background-color: #348eda;
+  border: solid #348eda;
+  border-width: 10px 20px;
+  line-height: 2em;
+  {{/* 2em * 14px = 28px, use px to get airier line-height also in Thunderbird, and Yahoo!, Outlook.com, AOL webmail clients */}}
+  {{/*line-height: 28px;*/}}
+  font-weight: bold;
+  text-align: center;
+  cursor: pointer;
+  display: inline-block;
+  border-radius: 5px;
+  text-transform: capitalize;
+}
+
+{{/* -------------------------------------
+    OTHER STYLES THAT MIGHT BE USEFUL
+------------------------------------- */}}
+.last {
+  margin-bottom: 0;
+}
+
+.first {
+  margin-top: 0;
+}
+
+.aligncenter {
+  text-align: center;
+}
+
+.alignright {
+  text-align: right;
+}
+
+.alignleft {
+  text-align: left;
+}
+
+.clear {
+  clear: both;
+}
+
+{{/* -------------------------------------
+    ALERTS
+    Change the class depending on warning email, good email or bad email
+------------------------------------- */}}
+.alert a {
+  color: #fff;
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 16px;
+}
+.alert-warning {
+  background-color: #E6522C;
+  font-size: 16px;
+  color: #fff;
+  font-weight: 500;
+  padding: 20px;
+  text-align: center;
+  border-radius: 3px 3px 0 0;
+}
+.alert-bad {
+  background-color: #D0021B;
+  font-size: 16px;
+  color: #fff;
+  font-weight: 500;
+  padding: 20px;
+}
+.alert-good {
+  background-color: #68B90F;
+  font-size: 16px;
+  color: #fff;
+  font-weight: 500;
+  padding: 20px;
+}
+
+{{/* -------------------------------------
+    INVOICE
+    Styles for the billing table
+------------------------------------- */}}
+.invoice {
+  margin: 40px auto;
+  text-align: left;
+  width: 80%;
+}
+.invoice td {
+  padding: 5px 0;
+}
+.invoice .invoice-items {
+  width: 100%;
+}
+.invoice .invoice-items td {
+  border-top: #eee 1px solid;
+}
+.invoice .invoice-items .total td {
+  border-top: 2px solid #333;
+  border-bottom: 2px solid #333;
+  font-weight: 700;
+}
+
+{{/* -------------------------------------
+    RESPONSIVE AND MOBILE FRIENDLY STYLES
+------------------------------------- */}}
+@media only screen and (max-width: 640px) {
+  body {
+    padding: 0 !important;
+  }
+
+  h1, h2, h3, h4 {
+    font-weight: 800 !important;
+    margin: 20px 0 5px !important;
+  }
+
+  h1 {
+    font-size: 22px !important;
+  }
+
+  h2 {
+    font-size: 18px !important;
+  }
+
+  h3 {
+    font-size: 16px !important;
+  }
+
+  .container {
+    padding: 0 !important;
+    width: 100% !important;
+  }
+
+  .content {
+    padding: 0 !important;
+  }
+
+  .content-wrap {
+    padding: 10px !important;
+  }
+
+  .invoice {
+    width: 100% !important;
+  }
+}
+</style>
+</head>
+
+<body>
+<table class="body-wrap">
+  <tr>
+    <td></td>
+    <td class="container" width="600">
+      <div class="content">
+        <table class="main" width="100%" cellpadding="0" cellspacing="0">
+          <tr>
+            {{- if gt (len .Alerts.Firing) 0 }}
+            <td class="alert-warning">
+            {{ else }}
+            <td class="alert-good">
+            {{- end -}}
+            {{ .Alerts | len }} alert{{- if gt (len .Alerts) 1 }}s{{- end -}} for {{ range .GroupLabels.SortedPairs }}
+            {{ .Name }}={{ .Value }}
+            {{- end -}}
+            </td>
+          </tr>
+          <tr>
+            <td class="content-wrap">
+              <table width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td class="content-block">
+                    <a href='{{ template "__alertmanagerURL" . }}' class="btn-primary">View Alert</a>
+    {{ with index .Alerts 0 -}}<a href="{{ template "__silencesURL" . }}" class="btn-primary">Silence Alert</a>{{- end -}}
+                  </td>
+                </tr>
+                {{- if gt (len .Alerts.Firing) 0 }}
+                <tr>
+                  <td class="content-block">
+                    <strong>[{{ .Alerts.Firing | len }}] Firing</strong>
+                  </td>
+                </tr>
+                {{- end -}}
+                {{ range .Alerts.Firing }}
+                <tr>
+                  <td class="content-block">
+                    {{- if gt (len .Annotations) 0 }}<strong>Annotations</strong><br />{{- end -}}
+                    {{ range .Annotations.SortedPairs }}{{ .Name }} = {{ .Value }}<br />{{- end -}}
+                    <strong>Labels</strong><br />
+                    {{ range .Labels.SortedPairs }}{{ .Name }} = {{ .Value }}<br />{{- end -}}
+                    <a href="{{ .GeneratorURL }}">Source</a><br />
+                    <hr>
+                  </td>
+                </tr>
+                {{- end -}}
+
+                {{- if gt (len .Alerts.Resolved) 0 }}
+                  {{- if gt (len .Alerts.Firing) 0 }}
+                <tr>
+                  <td class="content-block">
+                    <br />
+                    <br />
+                  </td>
+                </tr>
+                  {{- end -}}
+                <tr>
+                  <td class="content-block">
+                    <strong>[{{ .Alerts.Resolved | len }}] Resolved</strong>
+                  </td>
+                </tr>
+                {{- end -}}
+                {{ range .Alerts.Resolved }}
+                <tr>
+                  <td class="content-block">
+                    {{- if gt (len .Annotations) 0 }}<strong>Annotations</strong><br />{{- end -}}
+                    {{ range .Annotations.SortedPairs }}{{ .Name }} = {{ .Value }}<br />{{- end -}}
+                    <strong>Labels</strong><br />
+                    {{ range .Labels.SortedPairs }}{{ .Name }} = {{ .Value }}<br />{{- end -}}
+                    <a href="{{ .GeneratorURL }}">Source</a><br />
+                  </td>
+                </tr>
+                {{- end -}}
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <div class="footer">
+          <table width="100%">
+            <tr>
+              <td class="aligncenter content-block"><a href='{{ .ExternalURL }}'>Sent by {{ template "__alertmanager" . }}</a></td>
+            </tr>
+            <tr>
+              <td class="aligncenter content-block"><a href='mailto:monitoring@dvag.com'>Team MON</a></td>
+            </tr>
+          </table>
+        </div></div>
+    </td>
+    <td></td>
+  </tr>
+</table>
+
+</body>
+</html>
+{{- end -}}
+

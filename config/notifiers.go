@@ -1029,7 +1029,7 @@ type JiraConfig struct {
 
 func (f *JiraFieldConfig) EnableUpdateValue() bool {
 	if f.EnableUpdate == nil {
-		return true
+		return false
 	}
 	return *f.EnableUpdate
 }
