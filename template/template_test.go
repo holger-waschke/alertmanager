@@ -979,6 +979,20 @@ func TestDeepCopyWithTemplate(t *testing.T) {
 			want: "123",
 		},
 		{
+			title: "plain string containing YAML comment syntax stays unchanged",
+			input: "issue # 1234",
+			fn:    identity,
+			want:  "issue # 1234",
+		},
+		{
+			title: "numeric value is rendered as integer",
+			input: "hello",
+			fn: TemplateFunc(func(string) (string, error) {
+				return "1234", nil
+			}),
+			want: 1234,
+		},
+		{
 			title: "quoted numeric string stays string in nested map",
 			input: map[string]any{
 				"customfield_11209": map[string]any{
